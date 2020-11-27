@@ -56,6 +56,11 @@ public class RRScheduler implements Runnable {
     private static HashMap<Integer, Double> _processCompletionTimes;
 
     /**
+     * Dictionary of process start statuses.
+     */
+    private static HashMap<Integer, Boolean> _processesStarted;
+
+    /**
      * Keeps track of the current runtime.
      */
     private static double _time;
@@ -64,6 +69,7 @@ public class RRScheduler implements Runnable {
      * Semaphore used to synchronize processes/threads.
      */
     private static Semaphore _semaphore;
+
 
     /**
      * Static constructor used to initialize the static variables to be used across the class instances.
@@ -78,6 +84,7 @@ public class RRScheduler implements Runnable {
             _queueSize = _processQueue.size();
             _processWaitTimes = new HashMap<Integer, Double>();
             _processCompletionTimes = new HashMap<Integer, Double>();
+            _processesStarted = new HashMap<Integer, Boolean>();
             InitializeHashMaps();
             _time = _processQueue.peek()[0];
             _semaphore = new Semaphore(1);
@@ -120,7 +127,11 @@ public class RRScheduler implements Runnable {
             if (!_processQueue.isEmpty()) {
                 var process = _processQueue.remove();
 
-                LogStartProcess(process);
+                if (!_processesStarted.get((int)process[2])) {
+                    LogStartProcess(process);
+                    _processesStarted.put((int)process[2], true);
+                }
+
                 LogResumedProcess(process);
 
                 var updatedProcess = UpdateRunTime(process);
@@ -201,6 +212,7 @@ public class RRScheduler implements Runnable {
         for (int i = 1; i <= _queueSize; i++) {
             _processWaitTimes.put(i, 0.0);
             _processCompletionTimes.put(i, 0.0);
+            _processesStarted.put(i, false);
         }
     }
 
