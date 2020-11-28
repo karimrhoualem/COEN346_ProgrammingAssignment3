@@ -1,4 +1,5 @@
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Queue;
@@ -23,7 +24,7 @@ public class RRScheduler implements Runnable {
     /**
      * The File object that holds the process input data.
      */
-    private static File _file;
+    private static File _inputFile;
 
     /**
      * Reader object used to read process data.
@@ -70,14 +71,32 @@ public class RRScheduler implements Runnable {
      */
     private static Semaphore _semaphore;
 
+    /**
+     * File writer user to log data to an output file.
+     */
+    private static FileWriter _fileWriter;
+
+    /**
+     * Name of output file.
+     */
+    private static File _outputFile;
+
+    private static Object _startLock = new Object();
+    private static Object _resumeLock = new Object();
+    private static Object _pauseLock = new Object();
+    private static Object _finishLock = new Object();
+    private static Object _updateLock = new Object();
+    private static Object _waitLock = new Object();
 
     /**
      * Static constructor used to initialize the static variables to be used across the class instances.
      */
     static {
         try {
-            _file = new File("TestFile.txt");
-            _reader = new Reader(_file);
+            _inputFile = new File("input.txt");
+            _outputFile = new File("output.txt");
+            _fileWriter = new FileWriter(_outputFile);
+            _reader = new Reader(_inputFile);
             _processQueue = _reader.get_processQueue();
             _duplicateProcessQueue = new LinkedBlockingQueue<>();
             CopyQueue();
@@ -119,7 +138,7 @@ public class RRScheduler implements Runnable {
      * Core Round Robin Scheduler logic that executes processes.
      * @throws InterruptedException
      */
-    private void StartProcess() throws InterruptedException {
+    private void StartProcess() throws InterruptedException, IOException {
 
         while (true) {
             _semaphore.acquire();
@@ -128,27 +147,42 @@ public class RRScheduler implements Runnable {
                 var process = _processQueue.remove();
 
                 if (!_processesStarted.get((int)process[2])) {
-                    LogStartProcess(process);
+                    synchronized (_startLock) {
+                        LogStartProcess(process);
+                    }
                     _processesStarted.put((int)process[2], true);
                 }
 
-                LogResumedProcess(process);
+                synchronized (_resumeLock) {
+                    LogResumedProcess(process);
+                }
 
-                var updatedProcess = UpdateRunTime(process);
+                double[] updatedProcess;
+                synchronized (_updateLock) {
+                    updatedProcess = UpdateRunTime(process);
+                }
 
                 if (updatedProcess[1] == 0) {
                     _processCompletionTimes.put((int)process[2], _time);
-                    LogCompletedProcess(updatedProcess);
+                    synchronized (_finishLock) {
+                        LogCompletedProcess(updatedProcess);
+                    }
                 }
                 else {
-                    LogPausedProcess(updatedProcess);
+                    synchronized (_pauseLock) {
+                        LogPausedProcess(updatedProcess);
+                    }
                     _processQueue.add(updatedProcess);
                 }
 
             }
             else {
                 FindWaitTimes();
-                LogWaitTimes();
+                synchronized (_waitLock) {
+                    LogWaitTimes();
+                }
+                _fileWriter.flush();
+                _fileWriter.close();
                 System.exit(1);
             }
 
@@ -170,17 +204,21 @@ public class RRScheduler implements Runnable {
     }
 
     /**
-     * Logs the wait times to an output file.
+     * Logs the wait times to console and an output file.
      */
-    private void LogWaitTimes() {
+    private void LogWaitTimes() throws IOException {
         System.out.println("---------------------------------------------------------------------");
         System.out.println("Waiting Times:");
+
+        _fileWriter.write("---------------------------------------------------------------------\n");
+        _fileWriter.write("Waiting Times:\n");
 
         int i = 1;
 
         for (var process : _duplicateProcessQueue) {
             var waitTime = _processWaitTimes.get(i);
             System.out.println("Process " + i + String.format(": %.6f", waitTime));
+            _fileWriter.write("Process " + i + String.format(": %.6f\n", waitTime));
             i++;
         }
     }
@@ -226,34 +264,38 @@ public class RRScheduler implements Runnable {
     }
 
     /**
-     * Logs the process starting message to an output file.
+     * Logs the process starting message to console and an output file.
      * @param process The current process that is starting.
      */
-    private void LogStartProcess(double[] process) {
+    private void LogStartProcess(double[] process) throws IOException {
         System.out.println("[Thread " + _threadNumber + String.format("] Time: %.6f", _time) + ", Process " + (int)process[2] + ", Started.");
+        _fileWriter.write("[Thread " + _threadNumber + String.format("] Time: %.6f", _time) + ", Process " + (int)process[2] + ", Started.\n");
     }
 
     /**
-     * Logs the process resuming message to an output file.
+     * Logs the process resuming message to console and an output file.
      * @param process The current process that is resuming.
      */
-    private void LogResumedProcess(double[] process) {
+    private void LogResumedProcess(double[] process) throws IOException {
         System.out.println("[Thread " + _threadNumber + String.format("] Time: %.6f", _time) + ", Process " + (int)process[2] + ", Resumed.");
+        _fileWriter.write("[Thread " + _threadNumber + String.format("] Time: %.6f", _time) + ", Process " + (int)process[2] + ", Resumed.\n");
     }
 
     /**
-     * Logs the process pausing message to an output file.
+     * Logs the process pausing message to console and an output file.
      * @param updatedProcess The current process that is pausing.
      */
-    private void LogPausedProcess(double[] updatedProcess) {
+    private void LogPausedProcess(double[] updatedProcess) throws IOException {
         System.out.println("[Thread " + _threadNumber + String.format("] Time: %.6f", _time) + ", Process " + (int)updatedProcess[2] + ", Paused.");
+        _fileWriter.write("[Thread " + _threadNumber + String.format("] Time: %.6f", _time) + ", Process " + (int)updatedProcess[2] + ", Paused.\n");
     }
 
     /**
-     * Logs the process completion message to an output file.
+     * Logs the process completion message to console and an output file.
      * @param updatedProcess The current process that is terminating.
      */
-    private void LogCompletedProcess(double[] updatedProcess) {
+    private void LogCompletedProcess(double[] updatedProcess) throws IOException {
         System.out.println("[Thread " + _threadNumber + String.format("] Time: %.6f", _time) + ", Process " + (int)updatedProcess[2] + ", Finished.");
+        _fileWriter.write("[Thread " + _threadNumber + String.format("] Time: %.6f", _time) + ", Process " + (int)updatedProcess[2] + ", Finished.\n");
     }
 }

@@ -8,7 +8,7 @@ import java.util.Queue;
 public class Simulation {
     public static void main(String[] args) throws IOException, InterruptedException {
         // Set up the simulation by loading processes from input file
-        File file = new File("TestFile.txt");
+        File file = new File("input.txt");
         Reader reader = new Reader(file);
         Queue<double[]> processQueue;
         processQueue = reader.get_processQueue();
