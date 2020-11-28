@@ -1,8 +1,7 @@
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Queue;
+import java.util.*;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
 
@@ -81,11 +80,34 @@ public class RRScheduler implements Runnable {
      */
     private static File _outputFile;
 
+    /**
+     * Used to synchronize access to the file writer when logging that a process started.
+     */
     private static Object _startLock = new Object();
+
+    /**
+     * Used to synchronize access to the file writer when logging that a process resumed.
+     */
     private static Object _resumeLock = new Object();
+
+    /**
+     * Used to synchronize access to the file writer when logging that a process paused.
+     */
     private static Object _pauseLock = new Object();
+
+    /**
+     * Used to synchronize access to the file writer when logging that a process terminated.
+     */
     private static Object _finishLock = new Object();
+
+    /**
+     * Used to synchronize access to the time variable when updating processes.
+     */
     private static Object _updateLock = new Object();
+
+    /**
+     * Used to synchronize access to the file writer when logging process wait times.
+     */
     private static Object _waitLock = new Object();
 
     /**
@@ -115,7 +137,7 @@ public class RRScheduler implements Runnable {
 
     /**
      * Constructs a new RRScheduler object
-     * @param tid The objects thread ID.
+     * @param tid The object's thread ID.
      */
     public RRScheduler(int tid) {
         _threadNumber = tid;
@@ -144,7 +166,7 @@ public class RRScheduler implements Runnable {
             _semaphore.acquire();
 
             if (!_processQueue.isEmpty()) {
-                var process = _processQueue.remove();
+                var process = FindProcessWithShortestRemainingTime();
 
                 if (!_processesStarted.get((int)process[2])) {
                     synchronized (_startLock) {
@@ -191,6 +213,31 @@ public class RRScheduler implements Runnable {
     }
 
     /**
+     * Rearranges Queue and places the process with the shortest remaining time at the front of the Queue.
+     * It is then removed to execute next.
+     */
+    private double[] FindProcessWithShortestRemainingTime() {
+        var SRT = _processQueue.peek();
+
+        for (var process : _processQueue) {
+            if (_time >= process[0]) { // Only check if process has already arrived in the queue.
+                if (process[1] <= SRT[1]) { // By checking for "<=", the scheduler will give priority to the older process if two have equal SRT.
+                    SRT = process;
+                }
+            }
+            else {
+                break;
+            }
+        }
+
+        while (SRT[2] != _processQueue.peek()[2]) { // We check for the process number in the 3rd index to give priority to older process.
+            _processQueue.add(_processQueue.remove());
+        }
+
+        return _processQueue.remove();
+    }
+
+    /**
      * Finds the wait times for each process upon program termination.
      */
     private void FindWaitTimes() {
@@ -198,7 +245,7 @@ public class RRScheduler implements Runnable {
 
         for (var process : _duplicateProcessQueue) {
             var completionTime = _processCompletionTimes.get(i);
-            _processWaitTimes.put(i, completionTime - process[0] - process[1] );
+            _processWaitTimes.put(i, ((completionTime - process[0] - process[1]) < 0)? 0.0 : (completionTime - process[0] - process[1]));
             i++;
         }
     }
@@ -213,13 +260,10 @@ public class RRScheduler implements Runnable {
         _fileWriter.write("---------------------------------------------------------------------\n");
         _fileWriter.write("Waiting Times:\n");
 
-        int i = 1;
-
-        for (var process : _duplicateProcessQueue) {
+        for (int i = 1; i <= _processWaitTimes.size(); i++) {
             var waitTime = _processWaitTimes.get(i);
             System.out.println("Process " + i + String.format(": %.6f", waitTime));
             _fileWriter.write("Process " + i + String.format(": %.6f\n", waitTime));
-            i++;
         }
     }
 
