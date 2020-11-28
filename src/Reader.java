@@ -7,19 +7,6 @@ import java.util.logging.Logger;
  * Used to read processes from a file.
  */
 public class Reader {
-//    //TODO: delete this after testing
-//    public static void main(String[] args) throws IOException {
-//        File file = new File("TestFile.txt");
-//        Queue<int[]> processQueue;
-//
-//        Reader reader = new Reader(file);
-//        processQueue = reader.get_processQueue();
-//
-//        for (var process: processQueue) {
-//            System.out.println(process[0] + " " + process[1]);
-//        }
-//    }
-
     /**
      * Used to read file.
      */
@@ -33,7 +20,9 @@ public class Reader {
     /**
      * Stores the processes in the order in which they're read from the file.
      */
-    private Queue<int[]> _processQueue;
+    private Queue<double[]> _processQueue;
+
+    private double _processNumber = 1;
 
     /**
      * Constructor used to create a Reader object, read processes from file, and insert them into a Queue.
@@ -53,7 +42,7 @@ public class Reader {
      * Gets the loaded process Queue.
      * @return The Queue of processes.
      */
-    public Queue<int[]> get_processQueue() {
+    public Queue<double[]> get_processQueue() {
         return _processQueue;
     }
 
@@ -70,13 +59,13 @@ public class Reader {
      * @return The Queue of processes
      * @throws IOException
      */
-    private Queue<int[]> readLines() throws IOException {
-        Queue<int[]> processQueue = new LinkedBlockingQueue<>();
+    private Queue<double[]> readLines() throws IOException {
+        Queue<double[]> processQueue = new LinkedBlockingQueue<>();
 
         try {
             while ((_line = _reader.readLine()) != null) {
                 String[] s = _line.split(" ");
-                processQueue.add(new int[] {Integer.parseInt(s[0]), Integer.parseInt(s[1])});
+                processQueue.add(new double[] {Integer.parseInt(s[0]), Integer.parseInt(s[1]), _processNumber++});
             }
         }
         catch (IOException e) {
